@@ -36,13 +36,18 @@ def create_dataloaders(cfg: DictConfig):
     bs = cfg.data.batch_size
     nw = cfg.data.num_workers
 
-    # Use registry to create dataset
+    # Build kwargs for the dataset factory
     create_fn = DATASET_REGISTRY.get(name)
-    train_set, test_set = create_fn(
+    dataset_kwargs = dict(
         root=str(root),
         img_size=cfg.data.img_size,
         download=download,
     )
+    # Pass val_root if explicitly set in config
+    if cfg.data.get("val_root") is not None:
+        dataset_kwargs["val_root"] = cfg.data.val_root
+
+    train_set, test_set = create_fn(**dataset_kwargs)
 
     train_loader = DataLoader(
         train_set,
@@ -70,3 +75,4 @@ def create_dataloaders(cfg: DictConfig):
 
 # Import submodules to trigger registration
 import src.datasets.image_datasets  # noqa: F401, E402
+import src.datasets.imagenet         # noqa: F401, E402

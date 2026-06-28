@@ -25,17 +25,23 @@ from src.utils.training import set_flags, get_lr, get_loss_fn, print_steps_info
 
 
 def _resolve_data_root(cfg):
-    """Resolve data root path relative to original working directory."""
+    """Resolve data root (and optional val_root) relative to original working directory."""
     root = Path(get_original_cwd()) / cfg.data.root
     root.mkdir(parents=True, exist_ok=True)
     download = bool(cfg.data.download) and not any(root.iterdir())
     cfg.data.root = str(root)
     cfg.data.download = download
+
+    # Resolve val_root if specified
+    if cfg.data.get("val_root") is not None:
+        val_root = Path(get_original_cwd()) / cfg.data.val_root
+        cfg.data.val_root = str(val_root)
+
     return cfg
 
 
 @torch.no_grad()
-def eval_sample(cfg: DictConfig, epoch: int, model, ema_model, flow) -> None:
+def eval_sample(cfg: DictConfig, epoch: int, model, ema_model, flow, device: str = "cuda") -> None:
     """Generate and save sample images for evaluation."""
     model.eval()
     ema_model.eval()
@@ -43,8 +49,8 @@ def eval_sample(cfg: DictConfig, epoch: int, model, ema_model, flow) -> None:
     print(f"Generating samples at epoch {epoch}")
     shape = (64, 3, cfg.sample.size, cfg.sample.size)
 
-    gen_x = flow.sample(model, shape, num_steps=2)
-    gen_x_ema = flow.sample(ema_model, shape, num_steps=2)
+    gen_x = flow.sample(model, shape, num_steps=2, device=device)
+    gen_x_ema = flow.sample(ema_model, shape, num_steps=2, device=device)
     gen_x = gen_x[-1]
     gen_x_ema = gen_x_ema[-1]
 
@@ -66,7 +72,9 @@ def main(cfg: DictConfig):
 
     # --- Factory-based component creation ---
     model = create_model(cfg).to(device)
-    model = torch.compile(model)
+    # dynamic=True: compile once for any batch size (avoids recompilation)
+    if cfg.trainer.get("compile", True):
+        model = torch.compile(model, dynamic=True)
 
     ema_model = torch.optim.swa_utils.AveragedModel(
         model, multi_avg_fn=torch.optim.swa_utils.get_ema_multi_avg_fn(0.9999)
@@ -83,10 +91,10 @@ def main(cfg: DictConfig):
     print_steps_info(cfg, train_loader)
 
     # --- Checkpoint resume ---
-    ckpt = None
-    if ckpt is not None:
+    ckpt_path = cfg.trainer.get("ckpt", None)
+    if ckpt_path is not None:
         step, curr_epoch, model, optim, scaler, ema_model = load_checkpoint(
-            ckpt, model, optim, scaler, ema_model
+            ckpt_path, model, optim, scaler, ema_model
         )
         print(f"Loaded checkpoint [step {step} ({curr_epoch})]")
     else:
@@ -132,9 +140,18 @@ def main(cfg: DictConfig):
 
                 step += 1
 
-        eval_sample(cfg, epoch, model, ema_model, flow)
+        eval_sample(cfg, epoch, model, ema_model, flow, device=device)
 
-    make_checkpoint(f"ckp_{step}.tar", step, epoch, model, optim, scaler, ema_model)
+        # Periodic checkpoint save
+        save_freq = cfg.trainer.get("save_freq", 50)
+        if (epoch + 1) % save_freq == 0:
+            make_checkpoint(
+                f"ckp_epoch{epoch+1}_step{step}.tar",
+                step, epoch, model, optim, scaler, ema_model,
+            )
+            print(f"Checkpoint saved at epoch {epoch+1}, step {step}")
+
+    make_checkpoint(f"ckp_final_step{step}.tar", step, epoch, model, optim, scaler, ema_model)
 
 
 if __name__ == "__main__":

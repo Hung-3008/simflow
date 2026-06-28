@@ -1,0 +1,43 @@
+# Config: CFM training on ImageNet-1K (small model — for quick experimentation)
+#
+# Usage:
+#   python -m src.train --config-name=imagenet
+#   python -m src.train --config-name=imagenet trainer.max_steps=10   # smoke test
+
+model:
+  name: "unet"
+  params:
+    # Small UNet: ch=128, 5 levels → ~90M params
+    ch: 128
+    ch_mul: [1, 1, 2, 2, 4]
+    att_channels: [0, 0, 0, 1, 1]
+    groups: 32
+    dropout: 0.0
+    scale_shift: true
+
+flow:
+  name: "optimal_transport"
+  sigma_min: 1e-4
+
+trainer:
+  min_lr: 1e-8
+  max_lr: 2e-4
+  warmup_steps: 5000
+  epochs: 200
+  max_steps: 400000
+  log_freq: 100
+  accumulation_steps: 4   # effective batch = batch_size * accumulation_steps = 256
+  save_freq: 10            # save checkpoint every N epochs
+  compile: false           # torch.compile causes symbolic shape errors on UNet — disable
+
+data:
+  dataset: "imagenet"
+  root: "data/imagenet/train"
+  val_root: "data/imagenet/val"
+  img_size: 128            # 128×128 for small model — reduces memory & compute
+  batch_size: 32
+  num_workers: 8
+  download: false
+
+sample:
+  size: 128
