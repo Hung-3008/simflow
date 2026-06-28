@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Hydra outputs
+outputs/
+multirun/
+
+# Training artifacts
+*.tar
+*.pt
+*.pth
+samples/
+
+# Data & Resources
+data/
+resources/
+docs/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
