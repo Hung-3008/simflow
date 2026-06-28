@@ -32,11 +32,11 @@ trainer:
 
 data:
   dataset: "imagenet"
-  root: "data/imagenet/train"
-  val_root: "data/imagenet/val"
+  root: "/media/hung/SSD/imagenet/train"
+  val_root: "/media/hung/SSD/imagenet/val"
   img_size: 128            # 128×128 for small model — reduces memory & compute
-  batch_size: 32
-  num_workers: 8
+  batch_size: 48
+  num_workers: 4
   download: false
 
 sample:
